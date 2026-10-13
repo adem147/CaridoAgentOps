@@ -1,0 +1,27 @@
+version: '3.8'
+services:
+  auth-service:
+    build: ./services/auth-service
+    ports:
+      - "80"
+  api-gateway:
+    build: ./services/api-gateway
+    ports:
+      - "80"
+  data-processor:
+    build: ./services/data-processor
+    ports:
+      - "80"
+  notification-service:
+    build: ./services/notification-service
+    ports:
+      - "80"
+  user-service:
+    build: ./services/user-service
+    ports:
+      - "80"
+  cardio-logic-service:
+    build: ./services/cardio-logic-service
+    ports:
+      - "80"
+
