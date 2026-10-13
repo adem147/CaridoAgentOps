@@ -1,2 +1,13 @@
-flask
-requests
+fastapi
+uvicorn
+librosa
+numpy
+scipy
+scikit-learn
+mlflow
+onnx
+onnxruntime
+torch
+torchaudio
+pytest
+python-multipart
