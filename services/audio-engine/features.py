@@ -27,11 +27,17 @@ def extract_mel_spectrogram(signal: np.ndarray, sr: int, config: FeatureConfig):
                                          hop_length=config.hop_length, n_fft=config.window_size)
     return np.mean(librosa.power_to_db(mel), axis=1)
 
-def extract_features(signal: np.ndarray, sr: int = 2000, config: FeatureConfig = FeatureConfig()):
+def extract_features(signal: np.ndarray, sr: int = 2000, config: FeatureConfig = FeatureConfig(), mode: str = 'all'):
     """
-    Combines all feature extraction methods into a single vector.
+    Extracts features from the audio signal.
+    mode='all': Combines MFCC, ZCR, and Mel Spectrogram into a single vector.
+    mode='mfcc': Extracts only MFCC features.
     """
     mfcc = extract_mfcc(signal, sr, config)
+
+    if mode == 'mfcc':
+        return mfcc
+
     zcr = extract_zcr(signal)
     mel = extract_mel_spectrogram(signal, sr, config)
 

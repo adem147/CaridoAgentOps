@@ -29,8 +29,16 @@ class AudioCustomCNN:
         # Minimal training loop implementation
         X_tensor = torch.FloatTensor(X)
         y_tensor = torch.LongTensor(y)
+
+        # --- HANDLE CLASS IMBALANCE VIA WEIGHTED LOSS ---
+        # Calculate weights: give more weight to the minority class (abnormal)
+        class_counts = np.bincount(y)
+        # Weight = Total Samples / (Number of Classes * Samples in Class)
+        weights = len(y) / (len(class_counts) * class_counts)
+        weights_tensor = torch.FloatTensor(weights)
+
         optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
-        criterion = nn.CrossEntropyLoss()
+        criterion = nn.CrossEntropyLoss(weight=weights_tensor)
 
         self.model.train()
         for epoch in range(10):
@@ -40,9 +48,25 @@ class AudioCustomCNN:
             loss.backward()
             optimizer.step()
 
-    def predict(self, X):
+    def predict(self, X, threshold=0.5):
         self.model.eval()
         with torch.no_grad():
             X_tensor = torch.FloatTensor(X)
             outputs = self.model(X_tensor)
-            return torch.argmax(outputs, dim=1).numpy()
+
+            # Convert raw scores to probabilities
+            probs = torch.softmax(outputs, dim=1)
+
+            # Use the threshold on the 'abnormal' class (index 1)
+            return (probs[:, 1] >= threshold).int().numpy()
+
+    def save(self, path):
+        """Saves the model weights to a file."""
+        torch.save(self.model.state_dict(), path)
+        print(f"Model weights saved to {path}")
+
+    def load(self, path):
+        """Loads the model weights from a file."""
+        self.model.load_state_dict(torch.load(path))
+        self.model.eval()
+        print(f"Model weights loaded from {path}")
