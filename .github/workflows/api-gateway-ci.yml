@@ -29,8 +29,7 @@ jobs:
         if [ -f api-gateway/requirements.txt ]; then pip install -r api-gateway/requirements.txt; fi
 
     # 4. Smoke Test: Verify the app starts
-    # We use 'timeout' to stop the app after 5 seconds, because a server runs forever.
-    # If it crashes before 5 seconds, the command fails and the CI fails.
+    # We add 'ls -R' first to debug the exact path on the GitHub runner
     - name: Smoke Test
       run: |
-        timeout 5s python api-gateway/main.py || [ $? -eq 124 ]
+        timeout 5s python services/api-gateway/main.py || [ $? -eq 124 ]
