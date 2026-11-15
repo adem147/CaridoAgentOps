@@ -6,6 +6,7 @@ import librosa
 import mlflow
 import numpy as np
 from sklearn.metrics import classification_report, confusion_matrix, recall_score
+from sklearn.preprocessing import StandardScaler
 
 from features import extract_features
 from models.custom_cnn import AudioCustomCNN
@@ -88,7 +89,12 @@ def get_fold_directories(folds_dir: str | Path) -> list[Path]:
     return fold_dirs
 
 
-def train_only_custom_cnn(folds_dir: str | Path) -> AudioCustomCNN:
+def train_only_custom_cnn(
+    folds_dir: str | Path,
+    epochs: int = 30,
+    batch_size: int = 64,
+    learning_rate: float = 0.001,
+) -> AudioCustomCNN:
     """Evaluate on fixed folds, then fit one final CNN on all recordings."""
     fold_dirs = get_fold_directories(folds_dir)
     print(f"--- CustomCNN {len(fold_dirs)}-Fold Cross-Validation ---")
@@ -108,9 +114,20 @@ def train_only_custom_cnn(folds_dir: str | Path) -> AudioCustomCNN:
         X_train = np.concatenate([X for index, (_, X, _) in enumerate(datasets) if index != test_index])
         y_train = np.concatenate([y for index, (_, _, y) in enumerate(datasets) if index != test_index])
 
-        model = AudioCustomCNN(input_dim=X_train.shape[1])
-        model.train(X_train, y_train)
-        predictions = model.predict(X_test)
+        # Fit preprocessing only on the training folds.  Transforming the test
+        # fold with those saved statistics prevents evaluation-data leakage.
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train)
+        X_test_scaled = scaler.transform(X_test)
+
+        model = AudioCustomCNN(
+            input_dim=X_train.shape[1],
+            epochs=epochs,
+            batch_size=batch_size,
+            learning_rate=learning_rate,
+        )
+        model.train(X_train_scaled, y_train)
+        predictions = model.predict(X_test_scaled)
 
         metrics = {
             "accuracy": float(np.mean(predictions == y_test)),
@@ -142,11 +159,17 @@ def train_only_custom_cnn(folds_dir: str | Path) -> AudioCustomCNN:
     print("\nConfusion Matrix (all held-out predictions):")
     print(confusion_matrix(y_true, y_pred))
 
-    final_model = AudioCustomCNN(input_dim=datasets[0][1].shape[1])
-    final_model.train(
-        np.concatenate([X for _, X, _ in datasets]),
-        np.concatenate([y for _, _, y in datasets]),
+    final_X = np.concatenate([X for _, X, _ in datasets])
+    final_y = np.concatenate([y for _, _, y in datasets])
+    final_scaler = StandardScaler()
+    final_model = AudioCustomCNN(
+        input_dim=final_X.shape[1],
+        epochs=epochs,
+        batch_size=batch_size,
+        learning_rate=learning_rate,
     )
+    final_model.train(final_scaler.fit_transform(final_X), final_y)
+    final_model.scaler = final_scaler
     return final_model
 
 
@@ -158,10 +181,18 @@ if __name__ == "__main__":
         default=DEFAULT_FOLDS_DIR,
         help="Directory containing fold_1 through fold_N directories.",
     )
+    parser.add_argument("--epochs", type=int, default=30)
+    parser.add_argument("--batch-size", type=int, default=64)
+    parser.add_argument("--learning-rate", type=float, default=0.001)
     args = parser.parse_args()
 
     try:
-        trained_model = train_only_custom_cnn(args.dataset_dir)
+        trained_model = train_only_custom_cnn(
+            args.dataset_dir,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            learning_rate=args.learning_rate,
+        )
         print("\nCross-validation and final training successful.")
     except Exception as error:
         print(f"\nAn error occurred during training: {error}")

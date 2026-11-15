@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+from torch.utils.data import DataLoader, TensorDataset
 
 class CustomCNN(nn.Module):
     def __init__(self, input_dim, num_classes=2):
@@ -21,37 +22,44 @@ class CustomCNN(nn.Module):
         return x
 
 class AudioCustomCNN:
-    def __init__(self, input_dim, num_classes=2):
-        self.model = CustomCNN(input_dim, num_classes)
+    def __init__(self, input_dim, num_classes=2, learning_rate=0.001, epochs=30, batch_size=64):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = CustomCNN(input_dim, num_classes).to(self.device)
         self.input_dim = input_dim
+        self.learning_rate = learning_rate
+        self.epochs = epochs
+        self.batch_size = batch_size
 
     def train(self, X, y):
-        # Minimal training loop implementation
+        """Fit with weighted loss and mini-batches on GPU when available."""
         X_tensor = torch.FloatTensor(X)
         y_tensor = torch.LongTensor(y)
 
-        # --- HANDLE CLASS IMBALANCE VIA WEIGHTED LOSS ---
-        # Calculate weights: give more weight to the minority class (abnormal)
-        class_counts = np.bincount(y)
-        # Weight = Total Samples / (Number of Classes * Samples in Class)
+        class_counts = np.bincount(y, minlength=2)
         weights = len(y) / (len(class_counts) * class_counts)
-        weights_tensor = torch.FloatTensor(weights)
+        weights_tensor = torch.FloatTensor(weights).to(self.device)
+        train_loader = DataLoader(
+            TensorDataset(X_tensor, y_tensor),
+            batch_size=self.batch_size,
+            shuffle=True,
+        )
 
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
         criterion = nn.CrossEntropyLoss(weight=weights_tensor)
 
         self.model.train()
-        for epoch in range(10):
-            optimizer.zero_grad()
-            outputs = self.model(X_tensor)
-            loss = criterion(outputs, y_tensor)
-            loss.backward()
-            optimizer.step()
+        for _ in range(self.epochs):
+            for X_batch, y_batch in train_loader:
+                optimizer.zero_grad()
+                outputs = self.model(X_batch.to(self.device))
+                loss = criterion(outputs, y_batch.to(self.device))
+                loss.backward()
+                optimizer.step()
 
     def predict(self, X, threshold=0.5):
         self.model.eval()
         with torch.no_grad():
-            X_tensor = torch.FloatTensor(X)
+            X_tensor = torch.FloatTensor(X).to(self.device)
             outputs = self.model(X_tensor)
 
             # Convert raw scores to probabilities
@@ -67,6 +75,6 @@ class AudioCustomCNN:
 
     def load(self, path):
         """Loads the model weights from a file."""
-        self.model.load_state_dict(torch.load(path))
+        self.model.load_state_dict(torch.load(path, map_location=self.device))
         self.model.eval()
         print(f"Model weights loaded from {path}")
