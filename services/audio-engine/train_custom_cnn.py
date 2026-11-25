@@ -20,9 +20,8 @@ DEFAULT_FOLDS_DIR = Path(__file__).resolve().parents[2] / "ourdataset" / "five_f
 
 
 def save_model_to_mlflow(pathological_recall, normal_recall, accuracy, n_folds, model_name="CustomCNN"):
-    # Colab has no MLflow server by default, so use local files unless a server
-    # URI is explicitly supplied through MLFLOW_TRACKING_URI.
-    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "file:./mlruns"))
+    # SQLite is supported by current MLflow releases and works locally/Colab.
+    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db"))
     mlflow.set_experiment("CardioAgent_Experiments")
 
     with mlflow.start_run():
@@ -149,8 +148,6 @@ def train_only_custom_cnn(
     }
     y_true = np.concatenate(all_targets)
     y_pred = np.concatenate(all_predictions)
-    save_model_to_mlflow(**aggregate_metrics, n_folds=len(fold_dirs), model_name="CustomCNN")
-
     print("\n--- Mean cross-validation metrics ---")
     for metric, value in aggregate_metrics.items():
         print(f"{metric}: {value:.4f}")
@@ -158,6 +155,11 @@ def train_only_custom_cnn(
     print(classification_report(y_true, y_pred, zero_division=0))
     print("\nConfusion Matrix (all held-out predictions):")
     print(confusion_matrix(y_true, y_pred))
+
+    try:
+        save_model_to_mlflow(**aggregate_metrics, n_folds=len(fold_dirs), model_name="CustomCNN")
+    except Exception as error:
+        print(f"MLflow logging skipped: {error}")
 
     final_X = np.concatenate([X for _, X, _ in datasets])
     final_y = np.concatenate([y for _, _, y in datasets])

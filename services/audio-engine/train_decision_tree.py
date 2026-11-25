@@ -17,9 +17,8 @@ PATHOLOGICAL_CLASS = 1
 NORMAL_CLASS = 0
 
 def save_model_to_mlflow(pathological_recall, normal_recall, accuracy, n_folds, model_name="DecisionTree"):
-    # Colab has no MLflow server by default, so use local files unless a server
-    # URI is explicitly supplied through MLFLOW_TRACKING_URI.
-    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "file:./mlruns"))
+    # SQLite is supported by current MLflow releases and works locally/Colab.
+    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db"))
 
     # Create or select an experiment
     mlflow.set_experiment("CardioAgent_Experiments")
@@ -153,8 +152,6 @@ def train_only_decision_tree(folds_dir: str | Path) -> AudioDecisionTree:
     }
     y_true = np.concatenate(all_targets)
     y_pred = np.concatenate(all_predictions)
-    save_model_to_mlflow(**aggregate_metrics, n_folds=len(fold_dirs), model_name="DecisionTree")
-
     print("\n--- Mean cross-validation metrics ---")
     for metric, value in aggregate_metrics.items():
         print(f"{metric}: {value:.4f}")
@@ -162,6 +159,11 @@ def train_only_decision_tree(folds_dir: str | Path) -> AudioDecisionTree:
     print(classification_report(y_true, y_pred, zero_division=0))
     print("\nConfusion Matrix (all held-out predictions):")
     print(confusion_matrix(y_true, y_pred))
+
+    try:
+        save_model_to_mlflow(**aggregate_metrics, n_folds=len(fold_dirs), model_name="DecisionTree")
+    except Exception as error:
+        print(f"MLflow logging skipped: {error}")
 
     # Cross-validation models are only for evaluation.  This is the single
     # final tree to export or deploy after comparison with other models.
